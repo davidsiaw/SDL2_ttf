@@ -1191,6 +1191,151 @@ int TTF_SizeText(TTF_Font *font, const char *text, int *w, int *h)
     return status;
 }
 
+static SDL_bool CharacterIsDelimiter(char c, const char *delimiters)
+{
+    while (*delimiters) {
+        if (c == *delimiters) {
+            return SDL_TRUE;
+        }
+        ++delimiters;
+    }
+    return SDL_FALSE;
+}
+
+static SDL_bool GetDimensionsOfWrappedTextSurface(int *width_p,
+                                                  int *height_p,
+                                                  const char *text,
+                                                  TTF_Font *font,
+                                                  int *numLines_p,
+                                                  char ***strLines_p,
+                                                  char *str,
+                                                  size_t str_len,
+                                                  Uint32 wrapLength)
+{
+    /* Get the dimensions of the text surface */
+    if ( (TTF_SizeUTF8(font, text, &(*width_p), &(*height_p)) < 0) || !(*width_p) ) {
+        TTF_SetError("Text has zero width");
+        return(SDL_FALSE);
+    }
+    
+    *width_p = 0;   /* set this to zero. we will find out what the longest line is */
+    
+    *numLines_p = 1;
+    *strLines_p = NULL;
+    if ( wrapLength > 0 && *text ) {
+        const char *wrapDelims = " \t\r\n";
+        int w, h;
+        int line = 0;
+        char *spot, *tok, *next_tok, *end;
+        char delim;
+        *numLines_p = 0;
+        
+        if ( str == NULL ) {
+            TTF_SetError("Out of memory");
+            return(SDL_FALSE);
+        }
+        
+        SDL_strlcpy(str, text, str_len+1);
+        tok = str;
+        end = str + str_len;
+        do {
+            size_t size = (*numLines_p+1)*sizeof(*(*strLines_p));
+            *strLines_p = (char **)SDL_realloc(*strLines_p, size);
+            if (!(*strLines_p)) {
+                TTF_SetError("Out of memory");
+                return(SDL_FALSE);
+            }
+            (*strLines_p)[(*numLines_p)++] = tok;
+            
+            /* Look for the end of the line */
+            if ((spot = SDL_strchr(tok, '\r')) != NULL ||
+                (spot = SDL_strchr(tok, '\n')) != NULL) {
+                if (*spot == '\r') {
+                    ++spot;
+                }
+                if (*spot == '\n') {
+                    ++spot;
+                }
+            } else {
+                spot = end;
+            }
+            next_tok = spot;
+            
+            /* Get the longest string that will fit in the desired space */
+            for ( ; ; ) {
+                /* Strip trailing whitespace */
+                while ( spot > tok &&
+                       CharacterIsDelimiter(spot[-1], wrapDelims) ) {
+                    --spot;
+                }
+                if ( spot == tok ) {
+                    if (CharacterIsDelimiter(*spot, wrapDelims)) {
+                        *spot = '\0';
+                    }
+                    break;
+                }
+                delim = *spot;
+                *spot = '\0';
+                
+                TTF_SizeUTF8(font, tok, &w, &h);
+                if ((Uint32)w <= wrapLength) {
+                    if (w > *width_p) {
+                        *width_p = w;
+                    }
+                    
+                    break;
+                } else {
+                    /* Back up and try again... */
+                    *spot = delim;
+                }
+                
+                while ( spot > tok &&
+                       !CharacterIsDelimiter(spot[-1], wrapDelims) ) {
+                    --spot;
+                }
+                if ( spot > tok ) {
+                    next_tok = spot;
+                }
+            }
+            tok = next_tok;
+        } while (tok < end);
+    }
+    
+    return SDL_TRUE;
+}
+
+int TTF_SizeUTF8_Wrapped(TTF_Font *font, const char *text, int wrapLength, int *w, int *h, int *lineCount)
+{
+    char *str, **strLines;
+    size_t str_len;
+    SDL_bool get_dimension_result;
+    
+    TTF_CHECKPOINTER(text, NULL);
+    
+    str = NULL;
+    if (wrapLength > 0 && text)
+    {
+        str_len = SDL_strlen(text);
+        str = SDL_stack_alloc(char, str_len+1);
+    }
+    get_dimension_result = GetDimensionsOfWrappedTextSurface(w,
+                                                             h,
+                                                             text,
+                                                             font,
+                                                             lineCount,
+                                                             &strLines,
+                                                             str,
+                                                             str_len,
+                                                             wrapLength);
+    if (!get_dimension_result) {
+        return(-1);
+    }
+    
+    *h *= *lineCount;
+    
+    return 0;
+}
+
 int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
 {
     int status;
@@ -1869,17 +2014,6 @@ SDL_Surface *TTF_RenderText_Blended_Wrapped(TTF_Font *font, const char *text, SD
     return surface;
 }
 
-static SDL_bool CharacterIsDelimiter(char c, const char *delimiters)
-{
-    while (*delimiters) {
-        if (c == *delimiters) {
-            return SDL_TRUE;
-        }
-        ++delimiters;
-    }
-    return SDL_FALSE;
-}
-
 SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
                                     const char *text, SDL_Color fg, Uint32 wrapLength)
 {
@@ -1899,95 +2033,30 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
     FT_UInt prev_index = 0;
     const int lineSpace = 2;
     int line, numLines, rowSize;
-    char *str, **strLines;
     size_t textlen;
+    char *str, **strLines;
+    size_t str_len;
+    SDL_bool get_dimension_result;
 
     TTF_CHECKPOINTER(text, NULL);
-
-    /* Get the dimensions of the text surface */
-    if ( (TTF_SizeUTF8(font, text, &width, &height) < 0) || !width ) {
-        TTF_SetError("Text has zero width");
-        return(NULL);
-    }
-
-    numLines = 1;
+    
     str = NULL;
-    strLines = NULL;
-    if ( wrapLength > 0 && *text ) {
-        const char *wrapDelims = " \t\r\n";
-        int w, h;
-        int line = 0;
-        char *spot, *tok, *next_tok, *end;
-        char delim;
-        size_t str_len = SDL_strlen(text);
-
-        numLines = 0;
-
+    if (wrapLength > 0 && text)
+    {
+        str_len = SDL_strlen(text);
         str = SDL_stack_alloc(char, str_len+1);
-        if ( str == NULL ) {
-            TTF_SetError("Out of memory");
-            return(NULL);
-        }
-
-        SDL_strlcpy(str, text, str_len+1);
-        tok = str;
-        end = str + str_len;
-        do {
-            strLines = (char **)SDL_realloc(strLines, (numLines+1)*sizeof(*strLines));
-            if (!strLines) {
-                TTF_SetError("Out of memory");
-                return(NULL);
-            }
-            strLines[numLines++] = tok;
-
-            /* Look for the end of the line */
-            if ((spot = SDL_strchr(tok, '\r')) != NULL ||
-                (spot = SDL_strchr(tok, '\n')) != NULL) {
-                if (*spot == '\r') {
-                    ++spot;
-                }
-                if (*spot == '\n') {
-                    ++spot;
-                }
-            } else {
-                spot = end;
-            }
-            next_tok = spot;
-
-            /* Get the longest string that will fit in the desired space */
-            for ( ; ; ) {
-                /* Strip trailing whitespace */
-                while ( spot > tok &&
-                        CharacterIsDelimiter(spot[-1], wrapDelims) ) {
-                    --spot;
-                }
-                if ( spot == tok ) {
-                    if (CharacterIsDelimiter(*spot, wrapDelims)) {
-                        *spot = '\0';
-                    }
-                    break;
-                }
-                delim = *spot;
-                *spot = '\0';
-
-                TTF_SizeUTF8(font, tok, &w, &h);
-                if ((Uint32)w <= wrapLength) {
-                    break;
-                } else {
-                    /* Back up and try again... */
-                    *spot = delim;
-                }
-
-                while ( spot > tok &&
-                        !CharacterIsDelimiter(spot[-1], wrapDelims) ) {
-                    --spot;
-                }
-                if ( spot > tok ) {
-                    next_tok = spot;
-                }
-            }
-            tok = next_tok;
-        } while (tok < end);
+    }
+    get_dimension_result = GetDimensionsOfWrappedTextSurface(&width,
+                                                             &height,
+                                                             text,
+                                                             font,
+                                                             &numLines,
+                                                             &strLines,
+                                                             str,
+                                                             str_len,
+                                                             wrapLength);
+    if (!get_dimension_result) {
+        return(NULL);
     }
 
     /* Create the target surface */
