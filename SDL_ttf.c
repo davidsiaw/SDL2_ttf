@@ -1272,6 +1272,12 @@ static SDL_bool GetDimensionsOfWrappedTextSurface(int *width_p,
                     if (CharacterIsDelimiter(*spot, wrapDelims)) {
                         *spot = '\0';
                     }
+                    
+                    /* since we are going to move to the next token
+                       we should split the text here. */
+                    if (next_tok < end) {
+                        *(next_tok - 1) = '\0';
+                    }
                     break;
                 }
                 delim = *spot;
@@ -1279,10 +1285,6 @@ static SDL_bool GetDimensionsOfWrappedTextSurface(int *width_p,
                 
                 TTF_SizeUTF8(font, tok, &w, &h);
                 if ((Uint32)w <= wrapLength) {
-                    if (w > *width_p) {
-                        *width_p = w;
-                    }
-                    
                     break;
                 } else {
                     /* Back up and try again... */
@@ -1297,6 +1299,11 @@ static SDL_bool GetDimensionsOfWrappedTextSurface(int *width_p,
                     next_tok = spot;
                 }
             }
+            // set width to the longest line
+            if (w > *width_p) {
+                *width_p = w;
+            }
+            
             tok = next_tok;
         } while (tok < end);
     }
@@ -2061,7 +2068,7 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
 
     /* Create the target surface */
     textbuf = SDL_CreateRGBSurface(SDL_SWSURFACE,
-            (numLines > 1) ? wrapLength : width,
+            width,
             height * numLines + (lineSpace * (numLines - 1)),
             32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
     if ( textbuf == NULL ) {
