@@ -149,6 +149,7 @@ extern DECLSPEC int SDLCALL TTF_GlyphMetrics(TTF_Font *font, Uint16 ch,
 /* Get the dimensions of a rendered string of text */
 extern DECLSPEC int SDLCALL TTF_SizeText(TTF_Font *font, const char *text, int *w, int *h);
 extern DECLSPEC int SDLCALL TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h);
+extern DECLSPEC int SDLCALL TTF_SizeUTF8_Wrapped(TTF_Font *font, const char *text, int wrapLength, int *w, int *h, int *lineCount);
 extern DECLSPEC int SDLCALL TTF_SizeUNICODE(TTF_Font *font, const Uint16 *text, int *w, int *h);
 
 /* Create an 8-bit palettized surface and render the given text at

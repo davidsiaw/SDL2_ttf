@@ -317,6 +317,8 @@
 					"$(HEADER_SEARCH_PATHS_QUOTED)",
 					"$(HOME)/Library/Frameworks/SDL2.framework/Headers",
 					/Library/Frameworks/SDL2.framework/Headers,
+					"$(PROJECT_DIR)/../external/freetype-2.4.12/include",
+					"$(PROJECT_DIR)/../../SDL/include",
 				);
 				HEADER_SEARCH_PATHS_QUOTED = "\"$(SRCROOT)/Frameworks/FreeType.framework/Headers\"";
 				MACOSX_DEPLOYMENT_TARGET = 10.5;
@@ -342,6 +344,8 @@
 					"$(HEADER_SEARCH_PATHS_QUOTED)",
 					"$(HOME)/Library/Frameworks/SDL2.framework/Headers",
 					/Library/Frameworks/SDL2.framework/Headers,
+					"$(PROJECT_DIR)/../external/freetype-2.4.12/include",
+					"$(PROJECT_DIR)/../../SDL/include",
 				);
 				HEADER_SEARCH_PATHS_QUOTED = "\"$(SRCROOT)/Frameworks/FreeType.framework/Headers\"";
 				MACOSX_DEPLOYMENT_TARGET = 10.5;
